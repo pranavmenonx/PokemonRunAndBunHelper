@@ -14,7 +14,10 @@ import {
   CardBody,
   HStack,
   useToast,
+  Image,
+  Spinner,
 } from '@chakra-ui/react';
+import axios from 'axios';
 
 interface Pokemon {
   name: string;
@@ -33,6 +36,7 @@ interface Pokemon {
     power: number | null;
     accuracy: number | null;
     category: string;
+    effects: string;
   }[];
   ability: string;
   item?: string;
@@ -72,6 +76,18 @@ interface BattleSimulatorProps {
   onSimulate: () => Promise<BattleResults | null>;
 }
 
+interface PokemonSpecies {
+  id: number;
+  name: string;
+  varieties: Array<{
+    is_default: boolean;
+    pokemon: {
+      name: string;
+      url: string;
+    };
+  }>;
+}
+
 const TYPE_COLORS: Record<string, string> = {
   Normal: 'gray.500',
   Fire: 'red.500',
@@ -93,6 +109,179 @@ const TYPE_COLORS: Record<string, string> = {
   Fairy: 'pink.300',
 };
 
+const getStatColor = (stat: string): string => {
+  switch (stat) {
+    case 'HP':
+      return 'green';
+    case 'Attack':
+      return 'red';
+    case 'Defense':
+      return 'orange';
+    case 'Sp. Attack':
+      return 'blue';
+    case 'Sp. Defense':
+      return 'purple';
+    case 'Speed':
+      return 'yellow';
+    default:
+      return 'gray';
+  }
+};
+
+const pokemonIdCache: { [key: string]: number } = {};
+
+async function getPokemonId(name: string): Promise<number> {
+  if (pokemonIdCache[name]) {
+    return pokemonIdCache[name];
+  }
+
+  try {
+    const formattedName = name.toLowerCase()
+      .replace('-hisui', '')
+      .replace(/[^a-z0-9-]/g, '');
+
+    const response = await axios.get<PokemonSpecies>(`https://pokeapi.co/api/v2/pokemon-species/${formattedName}`);
+    
+    pokemonIdCache[name] = response.data.id;
+    return response.data.id;
+  } catch (error) {
+    console.error(`Error fetching Pokémon ID for ${name}:`, error);
+    return 0;
+  }
+}
+
+// Add this new component for Pokemon cards
+const PokemonCard: React.FC<{ pokemon: Pokemon }> = ({ pokemon }) => {
+  const [spriteId, setSpriteId] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadSprite = async () => {
+      setIsLoading(true);
+      const id = await getPokemonId(pokemon.name);
+      setSpriteId(id);
+      setIsLoading(false);
+    };
+    loadSprite();
+  }, [pokemon.name]);
+
+  if (!pokemon || !pokemon.types || !pokemon.stats || !pokemon.moves) {
+    console.error('Invalid Pokemon data:', pokemon);
+    return null;
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <HStack spacing={4} width="100%">
+          {isLoading ? (
+            <Box boxSize="96px" display="flex" alignItems="center" justifyContent="center">
+              <Spinner />
+            </Box>
+          ) : (
+            <Image
+              src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${spriteId || 0}.png`}
+              alt={pokemon.name}
+              boxSize="96px"
+              fallbackSrc="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/0.png"
+            />
+          )}
+          <VStack align="start" spacing={2} flex={1}>
+            <Heading size="md">{pokemon.name}</Heading>
+            <HStack>
+              {pokemon.types.map((type) => (
+                <Badge key={type} bg={TYPE_COLORS[type] || 'gray.500'}>
+                  {type}
+                </Badge>
+              ))}
+            </HStack>
+          </VStack>
+        </HStack>
+      </CardHeader>
+      <CardBody>
+        <VStack spacing={4} align="stretch">
+          <Box>
+            <Text fontWeight="bold">Ability: {pokemon.ability}</Text>
+            {pokemon.item && <Text>Item: {pokemon.item}</Text>}
+          </Box>
+          <Box>
+            <Text fontWeight="bold">Stats:</Text>
+            <Grid templateColumns="auto 1fr" gap={2}>
+              {Object.entries(pokemon.stats).map(([stat, value]) => (
+                <React.Fragment key={stat}>
+                  <Text>{stat}:</Text>
+                  <HStack spacing={2}>
+                    <Text>{value}</Text>
+                    <Progress
+                      value={(value / 255) * 100}
+                      size="sm"
+                      width="100px"
+                      colorScheme={getStatColor(stat)}
+                    />
+                  </HStack>
+                </React.Fragment>
+              ))}
+            </Grid>
+          </Box>
+          <Box>
+            <Text fontWeight="bold" mb={2}>Moves:</Text>
+            <Grid templateColumns="repeat(2, 1fr)" gap={2}>
+              {pokemon.moves.map((move) => (
+                <Box
+                  key={move.name}
+                  position="relative"
+                  _hover={{
+                    '& > div': {
+                      opacity: 1,
+                      visibility: 'visible',
+                    }
+                  }}
+                >
+                  <Badge
+                    width="100%"
+                    p={2}
+                    variant="subtle"
+                    colorScheme={TYPE_COLORS[move.type]?.split('.')[0] || 'gray'}
+                  >
+                    {move.name}
+                  </Badge>
+                  <Box
+                    position="absolute"
+                    bottom="100%"
+                    left="0"
+                    right="0"
+                    bg="gray.700"
+                    color="white"
+                    p={2}
+                    borderRadius="md"
+                    opacity={0}
+                    visibility="hidden"
+                    transition="all 0.2s"
+                    zIndex={1}
+                    boxShadow="lg"
+                  >
+                    <VStack align="start" spacing={1}>
+                      <HStack>
+                        <Badge colorScheme={TYPE_COLORS[move.type]?.split('.')[0] || 'gray'}>
+                          {move.type}
+                        </Badge>
+                        <Badge colorScheme="blue">{move.category}</Badge>
+                      </HStack>
+                      {move.power && <Text>Power: {move.power}</Text>}
+                      {move.accuracy && <Text>Accuracy: {move.accuracy}</Text>}
+                      <Text fontSize="sm">{move.effects}</Text>
+                    </VStack>
+                  </Box>
+                </Box>
+              ))}
+            </Grid>
+          </Box>
+        </VStack>
+      </CardBody>
+    </Card>
+  );
+};
+
 export const BattleSimulator: React.FC<BattleSimulatorProps> = ({
   playerTeam,
   opponentTeam,
@@ -105,7 +294,6 @@ export const BattleSimulator: React.FC<BattleSimulatorProps> = ({
   const toast = useToast();
 
   useEffect(() => {
-    // Reset state when teams change
     setBattleResults(null);
     setCurrentTurn(0);
     setError(null);
@@ -167,60 +355,7 @@ export const BattleSimulator: React.FC<BattleSimulatorProps> = ({
   }, [playerTeam, opponentTeam, onSimulate, toast]);
 
   const renderPokemonCard = useCallback((pokemon: Pokemon) => {
-    if (!pokemon || !pokemon.types || !pokemon.stats || !pokemon.moves) {
-      console.error('Invalid Pokemon data:', pokemon);
-      return null;
-    }
-
-    return (
-      <Card>
-        <CardHeader>
-          <VStack align="start" spacing={2}>
-            <Heading size="md">{pokemon.name}</Heading>
-            <HStack>
-              {pokemon.types.map((type) => (
-                <Badge key={type} bg={TYPE_COLORS[type] || 'gray.500'}>
-                  {type}
-                </Badge>
-              ))}
-            </HStack>
-          </VStack>
-        </CardHeader>
-        <CardBody>
-          <VStack spacing={4} align="stretch">
-            <Box>
-              <Text fontWeight="bold">Ability: {pokemon.ability}</Text>
-              {pokemon.item && <Text>Item: {pokemon.item}</Text>}
-            </Box>
-            <Box>
-              <Text fontWeight="bold">Stats:</Text>
-              <Grid templateColumns="auto 1fr" gap={2}>
-                {Object.entries(pokemon.stats).map(([stat, value]) => (
-                  <React.Fragment key={stat}>
-                    <Text>{stat}: {value}</Text>
-                    <Progress value={(value / 255) * 100} size="sm" colorScheme="blue" />
-                  </React.Fragment>
-                ))}
-              </Grid>
-            </Box>
-            <Box>
-              <Text fontWeight="bold">Moves:</Text>
-              <Grid templateColumns="repeat(2, 1fr)" gap={2}>
-                {pokemon.moves.map((move) => (
-                  <Badge
-                    key={move.name}
-                    variant="subtle"
-                    colorScheme={TYPE_COLORS[move.type]?.split('.')[0] || 'gray'}
-                  >
-                    {move.name}
-                  </Badge>
-                ))}
-              </Grid>
-            </Box>
-          </VStack>
-        </CardBody>
-      </Card>
-    );
+    return <PokemonCard pokemon={pokemon} />;
   }, []);
 
   if (error) {
