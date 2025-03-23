@@ -1,0 +1,12 @@
+When the AI needs to switch in a Pokémon (after something faints or similar) it will calculate the switch-in score of each of it's own Pokémon against the player's Pokémon that is out at the time. It will then send out the Pokémon with the highest switch-in score. In case of ties it will go to the first Pokémon in party order.	
+Score	Condition
++5	AI's Pokémon is faster than the player's and OHKO's it.
++4	AI's Pokémon is slower than the player's but OHKO's it and is not OHKO'd.
++3	AI's Pokémon is faster than the player's and deals more damage than it takes (damage is considered in % and not raw numbers).
++2	AI's Pokémon is slower than the player's and deals more damage than it takes (damage is considered in % and not raw numbers).
++1	AI's Pokémon is faster than the player's.
+0	Default.
+-1	AI's Pokémon is slower than the player's and is OHKO'd.
+	Special Cases
++2	Ditto.
++2	Wynaut and Wobbuffet, as long as they are not slower than the player's Pokémon and OHKO'd.
